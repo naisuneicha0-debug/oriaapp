@@ -1,0 +1,2 @@
+# oriaapp
+育てるAI

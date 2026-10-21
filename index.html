@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>オリア</title>
+<style>
+:root{
+  --bg:#f6f3ee; --panel:#ffffff; --text:#2b2723; --muted:#8a8279;
+  --me:#e4d9c8; --oria:#ffffff; --accent:#b08a5b; --border:#e3ddd3; --danger:#b5473a;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#1c1a18; --panel:#26231f; --text:#eee9e2; --muted:#9a9187;
+    --me:#4a3f31; --oria:#2d2a26; --accent:#c9a273; --border:#3a352f; --danger:#d86a5b;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  display:flex; flex-direction:column; height:100dvh;
+}
+header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top));
+  background:var(--panel); border-bottom:1px solid var(--border);
+}
+header h1{font-size:17px; margin:0; font-weight:600; letter-spacing:.05em}
+header small{color:var(--muted); font-size:12px; margin-left:8px}
+button{font:inherit; color:inherit; cursor:pointer}
+.ghost{
+  background:none; border:1px solid var(--border); border-radius:8px;
+  padding:6px 12px; font-size:14px;
+}
+#messages{
+  flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px;
+}
+.empty{margin:auto; color:var(--muted); font-size:14px; text-align:center; line-height:1.8}
+.row{display:flex; flex-direction:column; max-width:86%}
+.row.me{align-self:flex-end; align-items:flex-end}
+.row.oria{align-self:flex-start; align-items:flex-start}
+.name{font-size:11px; color:var(--muted); margin:0 6px 3px}
+.bubble{
+  padding:10px 14px; border-radius:16px; line-height:1.7; font-size:15.5px;
+  white-space:pre-wrap; word-break:break-word; border:1px solid var(--border);
+}
+.me .bubble{background:var(--me); border-bottom-right-radius:4px}
+.oria .bubble{background:var(--oria); border-bottom-left-radius:4px}
+.bubble.err{border-color:var(--danger); color:var(--danger)}
+.memnote{font-size:12px; color:var(--accent); margin:4px 6px 0}
+.typing{color:var(--muted)}
+form{
+  display:flex; gap:8px; padding:10px 12px; padding-bottom:calc(10px + env(safe-area-inset-bottom));
+  background:var(--panel); border-top:1px solid var(--border);
+}
+#input{
+  flex:1; resize:none; max-height:140px; min-height:44px;
+  border:1px solid var(--border); border-radius:12px; padding:10px 12px;
+  font:inherit; font-size:16px; background:var(--bg); color:var(--text); line-height:1.5;
+}
+#send{
+  border:none; border-radius:12px; padding:0 18px; background:var(--accent);
+  color:#fff; font-weight:600; font-size:15px;
+}
+#send:disabled{opacity:.5}
+dialog{
+  width:min(560px,94vw); max-height:88dvh; padding:0; border:1px solid var(--border);
+  border-radius:16px; background:var(--panel); color:var(--text);
+}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.dhead{display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border)}
+.tabs{display:flex; gap:6px; padding:10px 16px 0}
+.tabs button{background:none; border:none; padding:8px 10px; border-bottom:2px solid transparent; color:var(--muted)}
+.tabs button.on{color:var(--text); border-bottom-color:var(--accent)}
+.sec{display:none; padding:14px 16px 18px; overflow-y:auto; max-height:62dvh}
+.sec.on{display:block}
+label{display:block; font-size:13px; color:var(--muted); margin:12px 0 4px}
+.sec input[type=text], .sec input[type=password], .sec textarea{
+  width:100%; border:1px solid var(--border); border-radius:10px; padding:9px 11px;
+  font:inherit; font-size:16px; background:var(--bg); color:var(--text);
+}
+.sec textarea{min-height:220px; line-height:1.55; font-size:14px}
+.btns{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+.hint{font-size:12.5px; color:var(--muted); line-height:1.6; margin:8px 0 0}
+.danger{color:var(--danger); border-color:var(--danger)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1 style="display:inline">オリア</h1><small id="status"></small></div>
+  <button class="ghost" id="openSettings" type="button">設定</button>
+</header>
+
+<div id="messages" aria-live="polite"></div>
+
+<form id="form">
+  <textarea id="input" rows="1" placeholder="オリアに話しかける" enterkeyhint="send"></textarea>
+  <button id="send" type="submit">送信</button>
+</form>
+
+<dialog id="dlg">
+  <div class="dhead"><strong>設定</strong><button class="ghost" id="closeDlg" type="button">閉じる</button></div>
+  <div class="tabs">
+    <button type="button" data-tab="s1" class="on">接続</button>
+    <button type="button" data-tab="s2">記憶</button>
+    <button type="button" data-tab="s3">人格</button>
+  </div>
+
+  <div class="sec on" id="s1">
+    <label for="apiKey">Gemini APIキー</label>
+    <input type="password" id="apiKey" autocomplete="off" placeholder="AIza...">
+    <p class="hint">キーはこの端末のブラウザにだけ保存されます。ページのコードには入っていません。他人と共有している端末では入れないでください。</p>
+    <label for="model">モデル名</label>
+    <input type="text" id="model" placeholder="gemini-2.5-flash">
+    <p class="hint">エラーでモデルが見つからないと出たら、Googleの最新のモデル名に書き換えてください。</p>
+    <div class="btns">
+      <button class="ghost" id="saveConn" type="button">保存</button>
+      <button class="ghost danger" id="clearChat" type="button">会話ログを消す</button>
+    </div>
+  </div>
+
+  <div class="sec" id="s2">
+    <label for="memory">オリアの記憶(1件1行)</label>
+    <textarea id="memory" spellcheck="false"></textarea>
+    <p class="hint">オリアの返答にある【記憶】の行は、自動でここに追加されます。直接書き換えたり、消したりもできます。</p>
+    <div class="btns">
+      <button class="ghost" id="saveMem" type="button">保存</button>
+      <button class="ghost" id="tidyMem" type="button">整理する</button>
+      <button class="ghost" id="exportMem" type="button">書き出し</button>
+      <button class="ghost" id="importMem" type="button">読み込み</button>
+      <input type="file" id="memFile" accept=".md,.txt" hidden>
+    </div>
+  </div>
+
+  <div class="sec" id="s3">
+    <label for="persona">人格プロンプト</label>
+    <textarea id="persona" spellcheck="false"></textarea>
+    <div class="btns">
+      <button class="ghost" id="savePersona" type="button">保存</button>
+      <button class="ghost" id="reloadPersona" type="button">persona.mdから読み込み直す</button>
+    </div>
+    <p class="hint">保存した内容が、毎回の会話でAIに渡されます。</p>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+
+/* ===== ストレージ(失敗しても動くようにtry/catch) ===== */
+const store = {
+  get(k, d = "") { try { const v = localStorage.getItem("oria." + k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("oria." + k, v); } catch (e) {} }
+};
+const $ = (s) => document.querySelector(s);
+
+/* ===== AIプロバイダ(ここだけ差し替えればClaudeやローカルLLMに変えられる) ===== */
+const DEFAULT_MODEL = "gemini-2.5-flash";
+const provider = {
+  name: "gemini",
+  // system: 文字列 / contents: [{role:"user"|"model", text:"..."}]
+  async call(system, contents) {
+    const key = store.get("apiKey");
+    if (!key) throw new Error("APIキーが未設定です。右上の設定から入力してください。");
+    const model = store.get("model", DEFAULT_MODEL) || DEFAULT_MODEL;
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent";
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: contents.map(c => ({ role: c.role, parts: [{ text: c.text }] }))
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data && data.error && data.error.message) || ("HTTP " + res.status));
+    const cand = data.candidates && data.candidates[0];
+    const parts = cand && cand.content && cand.content.parts;
+    if (!parts || !parts.length) {
+      const br = data.promptFeedback && data.promptFeedback.blockReason;
+      throw new Error(br ? "ブロックされました: " + br : "空の返答でした。もう一度送ってみてください。");
+    }
+    return parts.map(p => p.text || "").join("");
+  }
+};
+
+/* ===== 状態 ===== */
+let chat = [];     // {role:"user"|"model", text, mem:[...]}
+let busy = false;
+const HISTORY_LIMIT = 30;
+
+try { chat = JSON.parse(store.get("chat", "[]")); if (!Array.isArray(chat)) chat = []; } catch (e) { chat = []; }
+
+/* ===== 記憶行の取り出し ===== */
+function extractMemory(text) {
+  const body = [], mem = [];
+  for (const line of text.split("\n")) {
+    if (/^\s*【記憶[^】]*】/.test(line)) mem.push(line.trim());
+    else body.push(line);
+  }
+  return { body: body.join("\n").trim(), mem };
+}
+
+function addMemory(lines) {
+  if (!lines.length) return;
+  const cur = store.get("memory", "").split("\n").map(s => s.trim()).filter(Boolean);
+  for (const l of lines) if (!cur.includes(l)) cur.push(l);
+  store.set("memory", cur.join("\n"));
+  $("#memory").value = cur.join("\n");
+}
+
+/* ===== 描画 ===== */
+function render() {
+  const box = $("#messages");
+  box.textContent = "";
+  if (!chat.length) {
+    const d = document.createElement("div");
+    d.className = "empty";
+    d.textContent = "ここがオリアの部屋。\n最初の一言をどうぞ。";
+    d.style.whiteSpace = "pre-line";
+    box.appendChild(d);
+    return;
+  }
+  for (const m of chat) box.appendChild(makeRow(m));
+  box.scrollTop = box.scrollHeight;
+}
+function makeRow(m, extraClass) {
+  const row = document.createElement("div");
+  row.className = "row " + (m.role === "user" ? "me" : "oria");
+  if (m.role !== "user") {
+    const n = document.createElement("div"); n.className = "name"; n.textContent = "オリア"; row.appendChild(n);
+  }
+  const b = document.createElement("div");
+  b.className = "bubble" + (extraClass ? " " + extraClass : "");
+  b.textContent = m.text;
+  row.appendChild(b);
+  if (m.mem && m.mem.length) {
+    const n = document.createElement("div"); n.className = "memnote";
+    n.textContent = "記憶を" + m.mem.length + "件残した";
+    row.appendChild(n);
+  }
+  return row;
+}
+function pushTemp(text, cls) {
+  const box = $("#messages");
+  const e = box.querySelector(".empty"); if (e) e.remove();
+  const row = makeRow({ role: "model", text }, cls);
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+  return row;
+}
+
+/* ===== 送信 ===== */
+function buildSystem() {
+  const persona = store.get("persona", "");
+  const mem = store.get("memory", "").trim();
+  return persona + "\n\n## 現在の記憶\n" + (mem || "(まだ記憶はない)");
+}
+
+async function send(text) {
+  if (busy) return;
+  busy = true; $("#send").disabled = true;
+  chat.push({ role: "user", text, mem: [] });
+  store.set("chat", JSON.stringify(chat));
+  render();
+  const typing = pushTemp("……", "typing");
+  try {
+    const recent = chat.slice(-HISTORY_LIMIT).map(m => ({ role: m.role, text: m.text }));
+    const raw = await provider.call(buildSystem(), recent);
+    const { body, mem } = extractMemory(raw);
+    chat.push({ role: "model", text: body || raw.trim(), mem });
+    addMemory(mem);
+    store.set("chat", JSON.stringify(chat));
+    render();
+  } catch (e) {
+    typing.remove();
+    pushTemp("うまくつながらなかった: " + e.message, "err");
+  } finally {
+    busy = false; $("#send").disabled = false;
+  }
+}
+
+$("#form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const t = $("#input").value.trim();
+  if (!t) return;
+  $("#input").value = ""; autoGrow();
+  send(t);
+});
+$("#input").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); $("#form").requestSubmit(); }
+});
+function autoGrow() { const i = $("#input"); i.style.height = "auto"; i.style.height = Math.min(i.scrollHeight, 140) + "px"; }
+$("#input").addEventListener("input", autoGrow);
+
+/* ===== 設定ダイアログ ===== */
+const dlg = $("#dlg");
+$("#openSettings").addEventListener("click", () => { fillSettings(); dlg.showModal(); });
+$("#closeDlg").addEventListener("click", () => dlg.close());
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".sec").forEach(s => s.classList.toggle("on", s.id === b.dataset.tab));
+}));
+function fillSettings() {
+  $("#apiKey").value = store.get("apiKey");
+  $("#model").value = store.get("model", DEFAULT_MODEL);
+  $("#memory").value = store.get("memory");
+  $("#persona").value = store.get("persona");
+}
+function updateStatus() { $("#status").textContent = store.get("apiKey") ? "" : "APIキー未設定"; }
+
+$("#saveConn").addEventListener("click", () => {
+  store.set("apiKey", $("#apiKey").value.trim());
+  store.set("model", $("#model").value.trim() || DEFAULT_MODEL);
+  updateStatus(); dlg.close();
+});
+$("#clearChat").addEventListener("click", () => {
+  if (!confirm("会話ログを全部消す?(記憶は消えない)")) return;
+  chat = []; store.set("chat", "[]"); render(); dlg.close();
+});
+
+$("#saveMem").addEventListener("click", () => {
+  store.set("memory", $("#memory").value.split("\n").map(s => s.trim()).filter(Boolean).join("\n"));
+  dlg.close();
+});
+$("#exportMem").addEventListener("click", () => {
+  const text = "# オリアの記憶\n\n" + store.get("memory").split("\n").filter(Boolean).map(l => "- " + l).join("\n") + "\n";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+  a.download = "oria_memory.md"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$("#importMem").addEventListener("click", () => $("#memFile").click());
+$("#memFile").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  const lines = parseMemoryText(await f.text());
+  if (!lines.length) { alert("【記憶】の行が見つからなかった"); return; }
+  const cur = $("#memory").value.split("\n").map(s => s.trim()).filter(Boolean);
+  for (const l of lines) if (!cur.includes(l)) cur.push(l);
+  $("#memory").value = cur.join("\n");
+  store.set("memory", cur.join("\n"));
+  ev.target.value = "";
+});
+$("#tidyMem").addEventListener("click", async () => {
+  const cur = $("#memory").value.trim();
+  if (!cur) return;
+  const btn = $("#tidyMem"); btn.disabled = true; btn.textContent = "整理中...";
+  try {
+    const out = await provider.call(
+      "あなたは記憶の整理係。指示に従って、行だけを出力する。",
+      [{ role: "user", text: "次の記憶行を、重複をまとめ、古くて重要度の低いものを省いて20件以内に整理して。形式(【記憶】(種類) 内容)は保ち、1件1行、行だけを出力して。\n\n" + cur }]
+    );
+    const lines = parseMemoryText(out);
+    if (!lines.length) throw new Error("整理結果が読み取れなかった");
+    if (confirm("整理後は" + lines.length + "件になる。置き換える?")) {
+      $("#memory").value = lines.join("\n"); store.set("memory", lines.join("\n"));
+    }
+  } catch (e) { alert("整理に失敗: " + e.message); }
+  finally { btn.disabled = false; btn.textContent = "整理する"; }
+});
+
+$("#savePersona").addEventListener("click", () => { store.set("persona", $("#persona").value); dlg.close(); });
+$("#reloadPersona").addEventListener("click", async () => {
+  const t = await fetchText("persona.md");
+  if (t === null) { alert("persona.mdを読み込めなかった(ファイルを直接開いている場合は動かない)"); return; }
+  $("#persona").value = t; store.set("persona", t);
+});
+
+/* ===== 初期読み込み ===== */
+function parseMemoryText(t) {
+  return t.split("\n").map(s => s.trim().replace(/^[-*]\s*/, "")).filter(s => /^【記憶[^】]*】/.test(s));
+}
+async function fetchText(path) {
+  try { const r = await fetch(path, { cache: "no-store" }); if (!r.ok) return null; return await r.text(); }
+  catch (e) { return null; }
+}
+async function init() {
+  updateStatus();
+  render();
+  if (!store.get("persona")) {
+    const t = await fetchText("persona.md");
+    if (t) store.set("persona", t);
+  }
+  if (!store.get("memory")) {
+    const t = await fetchText("oria_memory.md");
+    if (t) { const l = parseMemoryText(t); if (l.length) store.set("memory", l.join("\n")); }
+  }
+}
+init();
+</script>
+</body>
+</html>
